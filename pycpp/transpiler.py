@@ -30,7 +30,9 @@ from .plugins import (
     SMALL_USINGS_MAP,
 )
 from .tracer import decltype
+import sys
 
+UNREAL = '--unreal=1' in sys.argv
 _AUTO = "auto()"
 
 
@@ -189,7 +191,7 @@ class CppTranspiler(CLikeTranspiler):
                 typename = "char **"
             args_list.append(f"{typename} {arg}")
 
-        template = "inline "
+        template = ""
         if len(typedecls) > 0:
             typedecls_str = ", ".join([f"typename {t}" for t in typedecls])
             template = f"template <{typedecls_str}>"
@@ -247,9 +249,10 @@ class CppTranspiler(CLikeTranspiler):
         declarations = node.declarations = extractor.get_declarations()
         node.class_assignments = extractor.class_assignments
 
-        ret = super().visit_ClassDef(node)
-        if ret is not None:
-            return ret
+        #ret = super().visit_ClassDef(node)
+        #assert ret is None
+        #if ret is not None:
+        #    return ret
 
         decorators = [get_id(d) for d in node.decorator_list]
         decorators = [
@@ -261,8 +264,12 @@ class CppTranspiler(CLikeTranspiler):
                 if ret is not None:
                     return ret
 
-        buf = [f"class {node.name} {{"]
-        buf += ["public:"]
+        buf = []
+        if UNREAL:
+            pass
+        else:
+            buf = [f"class {node.name} {{"]
+            buf += ["public:"]
         fields = []
         index = 0
         for declaration, typename in declarations.items():
@@ -270,13 +277,27 @@ class CppTranspiler(CLikeTranspiler):
                 typename = "ST{0}".format(index)
                 index += 1
             fields.append(f"{typename} {declaration}")
+        if UNREAL:
+            fields = []
 
         for b in node.body:
             if isinstance(b, ast.FunctionDef):
                 b.self_type = node.name
 
         buf += [";\n".join(fields + [""])]
-        body = [self.visit(b) for b in node.body]
+        if UNREAL:
+            body = []
+            for b in node.body:
+                b = self.visit(b)
+                if '__init__' in b:
+                    continue
+                a = b[ : b.index(' ') ]
+                b = b[ b.index(' ') : ]
+                c = a + ' ' + node.name + '::' + b
+                body.append(c)
+            ##almost correct## body = [node.name + '::' + self.visit(b) for b in node.body]
+        else:
+            body = [self.visit(b) for b in node.body]
         if node.is_dataclass:
             field_names = [arg for arg in declarations.keys()]
             args = ", ".join(fields)
@@ -286,7 +307,10 @@ class CppTranspiler(CLikeTranspiler):
             constructor = f"{node.name}({args}) {{{assignments};}}"
             body = [constructor] + body
         buf += body
-        buf += ["};"]
+        if UNREAL:
+            pass
+        else:
+            buf += ["};"]
         return "\n".join(buf) + "\n"
 
     def _visit_enum(self, node, typename: str, fields: List[Tuple]) -> str:
@@ -361,6 +385,10 @@ class CppTranspiler(CLikeTranspiler):
             raise AstNotImplementedError(f"Call {fname} ({vargs}) not supported", node)
 
         args = ", ".join(vargs)
+
+        if fname == "printf":
+            return "std::cout << " + args + ";"
+
         return f"{fname}({args})"
 
     def visit_For(self, node) -> str:
@@ -480,7 +508,12 @@ class CppTranspiler(CLikeTranspiler):
         name = MODULE_DISPATCH_TABLE[name] if name in MODULE_DISPATCH_TABLE else name
         if "<" in name:
             return f"#include {name}"
-        return f'#include "{name}.h"'
+        elif name.endswith(".h"):
+            if UNREAL:
+                return '#include "%s"' % ('../Public/' + name)
+            else:
+                return '#include "%s"' % name
+        return f'#include <{name}>'
 
     def _import_from(self, module_name: str, names: List[str], level: int = 0) -> str:
         if len(names) == 1:

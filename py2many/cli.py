@@ -99,23 +99,23 @@ def _transpile(
     outputs = {}
     successful = []
     for filename, tree in zip(topo_filenames, trees):
-        try:
+        # try:
             output = _transpile_one(
                 trees, tree, transpiler, rewriters, transformers, post_rewriters, args
             )
             successful.append(filename)
             outputs[filename] = output
-        except Exception as e:
-            import traceback
+        # except Exception as e:
+        #     import traceback
 
-            formatted_lines = traceback.format_exc().splitlines()
-            if isinstance(e, AstErrorBase):
-                print(f"{filename}:{e.lineno}:{e.col_offset}: {formatted_lines[-1]}")
-            else:
-                print(f"{filename}: {formatted_lines[-1]}")
-            if not _suppress_exceptions or not isinstance(e, _suppress_exceptions):
-                raise
-            outputs[filename] = "FAILED"
+        #     formatted_lines = traceback.format_exc().splitlines()
+        #     if isinstance(e, AstErrorBase):
+        #         print(f"{filename}:{e.lineno}:{e.col_offset}: {formatted_lines[-1]}")
+        #     else:
+        #         print(f"{filename}: {formatted_lines[-1]}")
+        #     if not _suppress_exceptions or not isinstance(e, _suppress_exceptions):
+        #         raise
+        #     outputs[filename] = "FAILED"
     # return output in the same order as input
     output_list = [outputs[f] for f in filenames]
     return output_list, successful
@@ -377,6 +377,7 @@ def main(args=None, env=os.environ):
             help=f"Generate {settings.display_name} code",
         )
     parser.add_argument("--outdir", default=None, help="Output directory")
+    parser.add_argument("--unreal", default=None)
     parser.add_argument(
         "-i",
         "--indent",
@@ -445,20 +446,20 @@ def main(args=None, env=os.environ):
 
         if source.is_file() or source.name == STDIN:
             print(f"Writing to: {outdir}", file=sys.stderr)
-            try:
-                rv = _process_one(settings, source, outdir, args, env)
-            except Exception as e:
-                import traceback
+            #try:
+            rv = _process_one(settings, source, outdir, args, env)
+            # except Exception as e:
+            #     import traceback
 
-                formatted_lines = traceback.format_exc().splitlines()
-                if isinstance(e, AstErrorBase):
-                    print(
-                        f"{source}:{e.lineno}:{e.col_offset}: {formatted_lines[-1]}",
-                        file=sys.stderr,
-                    )
-                else:
-                    print(f"{source}: {formatted_lines[-1]}", file=sys.stderr)
-                rv = False
+            #     formatted_lines = traceback.format_exc().splitlines()
+            #     if isinstance(e, AstErrorBase):
+            #         print(
+            #             f"{source}:{e.lineno}:{e.col_offset}: {formatted_lines[-1]}",
+            #             file=sys.stderr,
+            #         )
+            #     else:
+            #         print(f"{source}: {formatted_lines[-1]}", file=sys.stderr)
+            #     rv = False
         else:
             if args.outdir is None:
                 outdir = source.parent / f"{source.name}-py2many"
