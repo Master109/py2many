@@ -30,6 +30,7 @@ from .plugins import (
     SMALL_USINGS_MAP,
 )
 
+mainClassName = ''
 
 class RustLoopIndexRewriter(ast.NodeTransformer):
     def visit_For(self, node):
@@ -373,6 +374,7 @@ class RustTranspiler(CLikeTranspiler):
         return f"{fname}{{{args}}}"
 
     def visit_Call(self, node) -> str:
+        global mainClassName
         fname = self.visit(node.func)
         fndef = node.scopes.find(fname)
 
@@ -406,8 +408,12 @@ class RustTranspiler(CLikeTranspiler):
             ref_args = vargs
 
         args = ", ".join(ref_args)
+        if len(args) == 0:
+            args = 'self'
+        else:
+            args = 'self, ' + args
         unwrap = "?" if node_result_type or node_func_result_type else ""
-        return f"{fname}({args}){unwrap}"
+        return f"{mainClassName}::{fname}({args}){unwrap}"
 
     def visit_For(self, node) -> str:
         target = self.visit(node.target)
@@ -560,6 +566,8 @@ class RustTranspiler(CLikeTranspiler):
         return f"enum {camel_node_name} {{ {body_str} }}\n\n impl {camel_node_name} {{ {impl_str} }}\n\n"
 
     def visit_ClassDef(self, node) -> str:
+        global mainClassName
+        mainClassName = node.name
         extractor = DeclarationExtractor(RustTranspiler())
         extractor.visit(node)
         node.declarations = declarations = extractor.get_declarations()
