@@ -377,7 +377,6 @@ def main(args=None, env=os.environ):
             help=f"Generate {settings.display_name} code",
         )
     parser.add_argument("--outdir", default=None, help="Output directory")
-    parser.add_argument("--unreal", default=None)
     parser.add_argument(
         "-i",
         "--indent",

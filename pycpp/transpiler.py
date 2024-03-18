@@ -30,11 +30,60 @@ from .plugins import (
     SMALL_USINGS_MAP,
 )
 from .tracer import decltype
-import sys
+import sys, os
 
+REPLACE_INDICATOR = 'ꗈ'
 UNREAL = '--unreal=1' in sys.argv
+UNREAL_TEMPLATES_PATH = os.getcwd() + '/Templates'
+UNREAL_ACTOR_TEMPLATE_PATH = UNREAL_TEMPLATES_PATH + '/Actor.cpp'
+EQUIVALENT_METHODS_TO_BEGIN_PLAY = [ 'def Awake', 'def OnEnable', 'def Start' ]
 _AUTO = "auto()"
 
+def IndexOfAny (string, findAny):
+    output = len(string)
+    for find in findAny:
+        indexOfFind = string.find(find)
+        if indexOfFind != -1:
+            output = min(indexOfFind, output)
+    if output == len(string):
+        return -1
+    return output
+
+def LastIndexOfAny (string : str, findAny : List[str]):
+    output = len(string)
+    for find in findAny:
+        indexOfFind = string.rfind(find)
+        if indexOfFind != -1:
+            output = min(indexOfFind, output)
+    if output == len(string):
+        return -1
+    return output
+
+def GetLineIndexAndIndentCountWithLessIndents (string : str, indents : int, startLineIndex : int) -> List[int]:
+    return GetLineIndexAndIndentCountWithLessIndents('\n'.split(string), indents, startLineIndex)
+
+def GetLineIndexAndIndentCountWithLessIndents (strings : List[str], indents : int, startLineIndex : int) -> List[int]:
+    outputIndents = 0
+    lineIndex = startLineIndex
+    for line in strings[startLineIndex :]:
+        for char in line:
+            if char is '\t':
+                outputIndents += 1
+            else:
+                if outputIndents < indents:
+                    return [lineIndex, outputIndents]
+                break
+        lineIndex += 1
+    return [-1, -1]
+
+def GetLineIndexOfSubstring (strings : List[str], find : str, startLineIndex : int) -> int:
+    lineIndex = startLineIndex
+    for line in strings[startLineIndex :]:
+        for find in strings:
+            if find in line:
+                return lineIndex
+        lineIndex += 1
+    return -1
 
 # TODO: merge this into py2many.cli.transpiler and fixup the tests
 def transpile(source, headers=False, testing=False):
@@ -265,20 +314,18 @@ class CppTranspiler(CLikeTranspiler):
                     return ret
 
         buf = []
+        fields = []
         if UNREAL:
             pass
         else:
             buf = [f"class {node.name} {{"]
             buf += ["public:"]
-        fields = []
-        index = 0
-        for declaration, typename in declarations.items():
-            if typename == None:
-                typename = "ST{0}".format(index)
-                index += 1
-            fields.append(f"{typename} {declaration}")
-        if UNREAL:
-            fields = []
+            index = 0
+            for declaration, typename in declarations.items():
+                if typename == None:
+                    typename = "ST{0}".format(index)
+                    index += 1
+                fields.append(f"{typename} {declaration}")
 
         for b in node.body:
             if isinstance(b, ast.FunctionDef):
@@ -295,7 +342,7 @@ class CppTranspiler(CLikeTranspiler):
                 b = b[ b.index(' ') : ]
                 c = a + ' ' + node.name + '::' + b
                 body.append(c)
-            ##almost correct## body = [node.name + '::' + self.visit(b) for b in node.body]
+            # Almost correct: body = [node.name + '::' + self.visit(b) for b in node.body]
         else:
             body = [self.visit(b) for b in node.body]
         if node.is_dataclass:
@@ -308,7 +355,32 @@ class CppTranspiler(CLikeTranspiler):
             body = [constructor] + body
         buf += body
         if UNREAL:
-            pass
+            actorTemplateText = open(UNREAL_ACTOR_TEMPLATE_PATH, 'rb').read().decode('utf-8')
+            output = actorTemplateText
+            className = 'A' + node.name # TODO: Only continue if this is the main class, otherwise return '\n'.join(buf) + '\n'
+            classContents = '\n'.join(buf)
+            output = output.replace(REPLACE_INDICATOR + '0', node.name)
+            output = output.replace(REPLACE_INDICATOR + '1', className)
+            indexOfImports = IndexOfAny(actorTemplateText, [ 'import ', 'from ' ])
+            lastIndexOfImports = LastIndexOfAny(actorTemplateText, [ 'import ', 'from ' ])
+            lineEndAfterLastIndexOfImports = actorTemplateText.find('\n', lastIndexOfImports)
+            imports = actorTemplateText[indexOfImports : lineEndAfterLastIndexOfImports]
+            output = output.replace(REPLACE_INDICATOR + '2', imports)
+            indexOfEquivalentMethodToBeginPlay = IndexOfAny(classContents, EQUIVALENT_METHODS_TO_BEGIN_PLAY)
+            beginPlayMethod = ''
+            beginPlayMethodContent = ''
+            if indexOfEquivalentMethodToBeginPlay != -1:
+                indexOfEquivalentMethodToBeginPlayContent = classContents.find('\n', indexOfEquivalentMethodToBeginPlay)
+                lineIndexOfEquivalentMethodToBeginPlayContentEndAndIndentCount = GetLineIndexAndIndentCountWithLessIndents(classContents, indexOfEquivalentMethodToBeginPlayContent)
+                
+                beginPlayMethod = classContents[indexOfEquivalentMethodToBeginPlayContent : lineIndexOfEquivalentMethodToBeginPlayContentEndAndIndentCount[0]]
+                beginPlayMethodContent = classContents[indexOfEquivalentMethodToBeginPlayContent + 1 : lineIndexOfEquivalentMethodToBeginPlayContentEndAndIndentCount - 1]
+            output = output.replace(REPLACE_INDICATOR + '3', beginPlayMethodContent)
+            tickMethodContent = ''
+            output = output.replace(REPLACE_INDICATOR + '4', tickMethodContent)
+            otherMembers = '\n'.join(buf).replace(beginPlayMethod, '')
+            output += otherMembers
+            return output
         else:
             buf += ["};"]
         return "\n".join(buf) + "\n"
@@ -509,10 +581,7 @@ class CppTranspiler(CLikeTranspiler):
         if "<" in name:
             return f"#include {name}"
         elif name.endswith(".h"):
-            if UNREAL:
-                return '#include "%s"' % ('../Public/' + name)
-            else:
-                return '#include "%s"' % name
+            return '#include "%s"' % name
         return f'#include <{name}>'
 
     def _import_from(self, module_name: str, names: List[str], level: int = 0) -> str:
