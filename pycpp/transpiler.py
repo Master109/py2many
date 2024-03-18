@@ -59,10 +59,7 @@ def LastIndexOfAny (string : str, findAny : List[str]):
         return -1
     return output
 
-def GetLineIndexAndIndentCountWithLessIndents (string : str, indents : int, startLineIndex : int) -> List[int]:
-    return GetLineIndexAndIndentCountWithLessIndents('\n'.split(string), indents, startLineIndex)
-
-def GetLineIndexAndIndentCountWithLessIndents (strings : List[str], indents : int, startLineIndex : int) -> List[int]:
+def GetLineIndexAndIndentCountWithLessIndents (strings : List[str], indents : int, startLineIndex : int = 0) -> List[int]:
     outputIndents = 0
     lineIndex = startLineIndex
     for line in strings[startLineIndex :]:
@@ -76,7 +73,16 @@ def GetLineIndexAndIndentCountWithLessIndents (strings : List[str], indents : in
         lineIndex += 1
     return [-1, -1]
 
-def GetLineIndexOfSubstring (strings : List[str], find : str, startLineIndex : int) -> int:
+def GetLineIndexAndIndentCountWithLessIndents (string : str, indents : int, startLineIndex : int = 0) -> List[int]:
+    return GetLineIndexAndIndentCountWithLessIndents('\n'.split(string), indents, startLineIndex)
+
+def GetLineIndexAndIndentCountWithLessIndents (strings : List[str], startLineIndex : int = 0) -> List[int]:
+    print('WOW' + str(len(strings)))
+    startLine = strings[startLineIndex]
+    indents = len(startLine) - len(startLine.lstrip('\t'))
+    return GetLineIndexAndIndentCountWithLessIndents(strings, indents, startLineIndex)
+
+def GetLineIndexOfSubstring (strings : List[str], find : str, startLineIndex : int = 0) -> int:
     lineIndex = startLineIndex
     for line in strings[startLineIndex :]:
         for find in strings:
@@ -358,7 +364,6 @@ class CppTranspiler(CLikeTranspiler):
             actorTemplateText = open(UNREAL_ACTOR_TEMPLATE_PATH, 'rb').read().decode('utf-8')
             output = actorTemplateText
             className = 'A' + node.name # TODO: Only continue if this is the main class, otherwise return '\n'.join(buf) + '\n'
-            classContents = '\n'.join(buf)
             output = output.replace(REPLACE_INDICATOR + '0', node.name)
             output = output.replace(REPLACE_INDICATOR + '1', className)
             indexOfImports = IndexOfAny(actorTemplateText, [ 'import ', 'from ' ])
@@ -366,19 +371,19 @@ class CppTranspiler(CLikeTranspiler):
             lineEndAfterLastIndexOfImports = actorTemplateText.find('\n', lastIndexOfImports)
             imports = actorTemplateText[indexOfImports : lineEndAfterLastIndexOfImports]
             output = output.replace(REPLACE_INDICATOR + '2', imports)
-            indexOfEquivalentMethodToBeginPlay = IndexOfAny(classContents, EQUIVALENT_METHODS_TO_BEGIN_PLAY)
-            beginPlayMethod = ''
-            beginPlayMethodContent = ''
-            if indexOfEquivalentMethodToBeginPlay != -1:
-                indexOfEquivalentMethodToBeginPlayContent = classContents.find('\n', indexOfEquivalentMethodToBeginPlay)
-                lineIndexOfEquivalentMethodToBeginPlayContentEndAndIndentCount = GetLineIndexAndIndentCountWithLessIndents(classContents, indexOfEquivalentMethodToBeginPlayContent)
-                
-                beginPlayMethod = classContents[indexOfEquivalentMethodToBeginPlayContent : lineIndexOfEquivalentMethodToBeginPlayContentEndAndIndentCount[0]]
-                beginPlayMethodContent = classContents[indexOfEquivalentMethodToBeginPlayContent + 1 : lineIndexOfEquivalentMethodToBeginPlayContentEndAndIndentCount - 1]
-            output = output.replace(REPLACE_INDICATOR + '3', beginPlayMethodContent)
+            lineIndexOfEquivalentMethodToBeginPlay = GetLineIndexOfSubstring(buf, EQUIVALENT_METHODS_TO_BEGIN_PLAY)
+            beginPlayMethodLines = []
+            beginPlayMethodContentLines = []
+            if lineIndexOfEquivalentMethodToBeginPlay != -1:
+                lineIndexOfEquivalentMethodToBeginPlayContent = lineIndexOfEquivalentMethodToBeginPlay + 1
+                print('WOW\n'.join(buf))
+                lineIndexOfEquivalentMethodToBeginPlayContentEnd = GetLineIndexAndIndentCountWithLessIndents(buf, startLineIndex=lineIndexOfEquivalentMethodToBeginPlayContent)[0]
+                beginPlayMethodLines = buf[lineIndexOfEquivalentMethodToBeginPlay : lineIndexOfEquivalentMethodToBeginPlayContentEnd]
+                beginPlayMethodContentLines = buf[lineIndexOfEquivalentMethodToBeginPlayContent : lineIndexOfEquivalentMethodToBeginPlayContentEnd]
+            output = output.replace(REPLACE_INDICATOR + '3', '\n'.join(beginPlayMethodContentLines))
             tickMethodContent = ''
             output = output.replace(REPLACE_INDICATOR + '4', tickMethodContent)
-            otherMembers = '\n'.join(buf).replace(beginPlayMethod, '')
+            otherMembers = '\n'.join(buf).replace('\n'.join(beginPlayMethodLines), '')
             output += otherMembers
             return output
         else:
