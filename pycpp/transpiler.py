@@ -34,10 +34,12 @@ import sys, os
 
 REPLACE_INDICATOR = 'ꗈ'
 UNREAL = '--unreal=1' in sys.argv
-UNREAL_TEMPLATES_PATH = os.getcwd() + '/Templates'
-UNREAL_ACTOR_TEMPLATE_PATH = UNREAL_TEMPLATES_PATH + '/Actor.cpp'
-EQUIVALENT_METHODS_TO_BEGIN_PLAY = [ 'def Awake', 'def OnEnable', 'def Start' ]
+TEMPLATES_PATH = os.getcwd() + '/../../../../Translator/Templates'
+UNREAL_ACTOR_TEMPLATE_PATH = TEMPLATES_PATH + '/Actor.cpp'
+EQUIVALENT_METHOD_NAMES_TO_BEGIN_PLAY = [ 'Awake', 'OnEnable', 'Start' ]
 _AUTO = "auto()"
+equivalentMethodsToBeginPlay = []
+mainClassName = ''
 
 def IndexOfAny (string, findAny):
     output = len(string)
@@ -59,7 +61,7 @@ def LastIndexOfAny (string : str, findAny : List[str]):
         return -1
     return output
 
-def GetLineIndexAndIndentCountWithLessIndents (strings : List[str], indents : int, startLineIndex : int = 0) -> List[int]:
+def _GetLineIndexAndIndentCountWithLessIndents (strings : List[str], indents : int, startLineIndex : int = 0) -> List[int]:
     outputIndents = 0
     lineIndex = startLineIndex
     for line in strings[startLineIndex :]:
@@ -73,20 +75,17 @@ def GetLineIndexAndIndentCountWithLessIndents (strings : List[str], indents : in
         lineIndex += 1
     return [-1, -1]
 
-def GetLineIndexAndIndentCountWithLessIndents (string : str, indents : int, startLineIndex : int = 0) -> List[int]:
-    return GetLineIndexAndIndentCountWithLessIndents('\n'.split(string), indents, startLineIndex)
-
 def GetLineIndexAndIndentCountWithLessIndents (strings : List[str], startLineIndex : int = 0) -> List[int]:
-    print('WOW' + str(len(strings)))
     startLine = strings[startLineIndex]
     indents = len(startLine) - len(startLine.lstrip('\t'))
-    return GetLineIndexAndIndentCountWithLessIndents(strings, indents, startLineIndex)
+    return _GetLineIndexAndIndentCountWithLessIndents(strings, indents, startLineIndex)
 
-def GetLineIndexOfSubstring (strings : List[str], find : str, startLineIndex : int = 0) -> int:
+def GetLineIndexOfAnySubstring (strings : List[str], find : List[str], startLineIndex : int = 0) -> int:
     lineIndex = startLineIndex
-    for line in strings[startLineIndex :]:
-        for find in strings:
-            if find in line:
+    while lineIndex < len(strings):
+        line = strings[lineIndex]
+        for _find in find:
+            if _find in line:
                 return lineIndex
         lineIndex += 1
     return -1
@@ -210,6 +209,7 @@ class CppTranspiler(CLikeTranspiler):
         return "\n".join([f"{line}{lint_exception}" for line in self._headers])
 
     def visit_FunctionDef(self, node) -> str:
+        global mainClassName
         body = "\n".join([self.visit(n) for n in node.body])
         # If rewriter inserted a block, we need to terminate it with a semicolon
         if len(node.body):
@@ -264,9 +264,13 @@ class CppTranspiler(CLikeTranspiler):
             return_type = "void"
 
         args = ", ".join(args_list)
-        funcdef = f"{template}{return_type} {node.name}({args}) {{"
+        funcdef = f"{template}{return_type} {mainClassName + '::'}{node.name}({args}) {{"
 
-        return funcdef + "\n" + body + "}\n"
+        output = funcdef + "\n" + body + "}\n"
+        if node.name in EQUIVALENT_METHOD_NAMES_TO_BEGIN_PLAY:
+            equivalentMethodsToBeginPlay.append(output)
+            return ''
+        return output
 
     def visit_Global(self, node) -> str:
         return ""
@@ -299,6 +303,10 @@ class CppTranspiler(CLikeTranspiler):
         return ret
 
     def visit_ClassDef(self, node) -> str:
+        global mainClassName
+        isMainClass = mainClassName == ''
+        if isMainClass:
+            mainClassName = 'A' + node.name
         extractor = DeclarationExtractor(CppTranspiler())
         extractor.visit(node)
         declarations = node.declarations = extractor.get_declarations()
@@ -338,19 +346,19 @@ class CppTranspiler(CLikeTranspiler):
                 b.self_type = node.name
 
         buf += [";\n".join(fields + [""])]
-        if UNREAL:
-            body = []
-            for b in node.body:
-                b = self.visit(b)
-                if '__init__' in b:
-                    continue
-                a = b[ : b.index(' ') ]
-                b = b[ b.index(' ') : ]
-                c = a + ' ' + node.name + '::' + b
-                body.append(c)
-            # Almost correct: body = [node.name + '::' + self.visit(b) for b in node.body]
-        else:
-            body = [self.visit(b) for b in node.body]
+        # if UNREAL:
+        #     body = []
+        #     for b in node.body:
+        #         b = self.visit(b)
+        #         if '__init__' in b:
+        #             continue
+        #         a = b[ : b.index(' ') ]
+        #         b = b[ b.index(' ') : ]
+        #         c = a + ' ' + node.name + '::' + b
+        #         body.append(c)
+        #     # Almost correct: body = [node.name + '::' + self.visit(b) for b in node.body]
+        # else:
+        body = [self.visit(b) for b in node.body]
         if node.is_dataclass:
             field_names = [arg for arg in declarations.keys()]
             args = ", ".join(fields)
@@ -361,29 +369,29 @@ class CppTranspiler(CLikeTranspiler):
             body = [constructor] + body
         buf += body
         if UNREAL:
+            if not isMainClass:
+               return "\n".join(buf) + "\n"
             actorTemplateText = open(UNREAL_ACTOR_TEMPLATE_PATH, 'rb').read().decode('utf-8')
             output = actorTemplateText
-            className = 'A' + node.name # TODO: Only continue if this is the main class, otherwise return '\n'.join(buf) + '\n'
             output = output.replace(REPLACE_INDICATOR + '0', node.name)
-            output = output.replace(REPLACE_INDICATOR + '1', className)
+            output = output.replace(REPLACE_INDICATOR + '1', mainClassName)
             indexOfImports = IndexOfAny(actorTemplateText, [ 'import ', 'from ' ])
             lastIndexOfImports = LastIndexOfAny(actorTemplateText, [ 'import ', 'from ' ])
             lineEndAfterLastIndexOfImports = actorTemplateText.find('\n', lastIndexOfImports)
             imports = actorTemplateText[indexOfImports : lineEndAfterLastIndexOfImports]
             output = output.replace(REPLACE_INDICATOR + '2', imports)
-            lineIndexOfEquivalentMethodToBeginPlay = GetLineIndexOfSubstring(buf, EQUIVALENT_METHODS_TO_BEGIN_PLAY)
-            beginPlayMethodLines = []
-            beginPlayMethodContentLines = []
-            if lineIndexOfEquivalentMethodToBeginPlay != -1:
-                lineIndexOfEquivalentMethodToBeginPlayContent = lineIndexOfEquivalentMethodToBeginPlay + 1
-                print('WOW\n'.join(buf))
-                lineIndexOfEquivalentMethodToBeginPlayContentEnd = GetLineIndexAndIndentCountWithLessIndents(buf, startLineIndex=lineIndexOfEquivalentMethodToBeginPlayContent)[0]
-                beginPlayMethodLines = buf[lineIndexOfEquivalentMethodToBeginPlay : lineIndexOfEquivalentMethodToBeginPlayContentEnd]
-                beginPlayMethodContentLines = buf[lineIndexOfEquivalentMethodToBeginPlayContent : lineIndexOfEquivalentMethodToBeginPlayContentEnd]
-            output = output.replace(REPLACE_INDICATOR + '3', '\n'.join(beginPlayMethodContentLines))
+            equivalentMethodContentsToBeginPlay = []
+            for i in range(len(equivalentMethodsToBeginPlay)):
+                method = equivalentMethodsToBeginPlay[i]
+                methodIndex = method.find('\n', method.find('{'))
+                methodEndIndex = method.rfind('\n', method.rfind('{'))
+                equivalentMethodContentsToBeginPlay.append(method[methodIndex : methodEndIndex - 1])
+            output = output.replace(REPLACE_INDICATOR + '3', '\n'.join(equivalentMethodContentsToBeginPlay))
             tickMethodContent = ''
             output = output.replace(REPLACE_INDICATOR + '4', tickMethodContent)
-            otherMembers = '\n'.join(buf).replace('\n'.join(beginPlayMethodLines), '')
+            otherMembers = '\n'.join(buf)
+            for method in equivalentMethodsToBeginPlay:
+                otherMembers = otherMembers.replace(method, '')
             output += otherMembers
             return output
         else:
