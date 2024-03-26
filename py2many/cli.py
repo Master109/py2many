@@ -37,6 +37,7 @@ ROOT_DIR = PY2MANY_DIR.parent
 STDIN = "-"
 STDOUT = "-"
 CWD = Path.cwd()
+UNREAL = '--unreal=1' in sys.argv
 
 
 def core_transformers(tree, trees, args):
@@ -226,7 +227,23 @@ def _process_one(settings: LanguageSettings, filename: Path, outdir: str, args, 
         return True
     result = _transpile([filename], [source_data], settings, args)
     with open(output_path, "wb") as f:
-        f.write(result[0][0].encode("utf-8"))
+        output = result[0][0]
+        if UNREAL:
+            output = output.split('\n')
+            output.insert(6, output[0])
+            del output[0]
+            output.insert(6, output[0])
+            del output[0]
+            for line in output:
+                if 'UGameplayStatics' in line:
+                    output.insert(6, '#include "Kismet/GameplayStatics.h"')
+                    break
+            output = '\n'.join(output)
+            output = output.replace("UGameplayStatics.", "UGameplayStatics::")
+            output = output.replace("FVector.", "FVector::")
+            output = output.replace("FMath.", "FMath::")
+            output = output.replace("UWorld.", "UWorld::")
+        f.write(output.encode("utf-8"))
 
     if settings.formatter:
         return _format_one(settings, output_path, env)

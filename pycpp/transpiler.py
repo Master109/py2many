@@ -34,11 +34,12 @@ import sys, os
 
 REPLACE_INDICATOR = 'ꗈ'
 UNREAL = '--unreal=1' in sys.argv
-TEMPLATES_PATH = os.getcwd() + '/../../../../Translator/Templates'
-UNREAL_ACTOR_TEMPLATE_PATH = TEMPLATES_PATH + '/Actor.cpp'
+TEMPLATES_PATH = os.getcwd() + '/Templates'
+UNREAL_ACTOR_TEMPLATE_PATH = TEMPLATES_PATH + '/SceneComponent.cpp'
 EQUIVALENT_METHOD_NAMES_TO_BEGIN_PLAY = [ 'Awake', 'OnEnable', 'Start' ]
 _AUTO = "auto()"
 equivalentMethodsToBeginPlay = []
+tickMethod = ''
 mainClassName = ''
 
 def IndexOfAny (string, findAny):
@@ -60,35 +61,6 @@ def LastIndexOfAny (string : str, findAny : List[str]):
     if output == len(string):
         return -1
     return output
-
-def _GetLineIndexAndIndentCountWithLessIndents (strings : List[str], indents : int, startLineIndex : int = 0) -> List[int]:
-    outputIndents = 0
-    lineIndex = startLineIndex
-    for line in strings[startLineIndex :]:
-        for char in line:
-            if char is '\t':
-                outputIndents += 1
-            else:
-                if outputIndents < indents:
-                    return [lineIndex, outputIndents]
-                break
-        lineIndex += 1
-    return [-1, -1]
-
-def GetLineIndexAndIndentCountWithLessIndents (strings : List[str], startLineIndex : int = 0) -> List[int]:
-    startLine = strings[startLineIndex]
-    indents = len(startLine) - len(startLine.lstrip('\t'))
-    return _GetLineIndexAndIndentCountWithLessIndents(strings, indents, startLineIndex)
-
-def GetLineIndexOfAnySubstring (strings : List[str], find : List[str], startLineIndex : int = 0) -> int:
-    lineIndex = startLineIndex
-    while lineIndex < len(strings):
-        line = strings[lineIndex]
-        for _find in find:
-            if _find in line:
-                return lineIndex
-        lineIndex += 1
-    return -1
 
 # TODO: merge this into py2many.cli.transpiler and fixup the tests
 def transpile(source, headers=False, testing=False):
@@ -210,6 +182,7 @@ class CppTranspiler(CLikeTranspiler):
 
     def visit_FunctionDef(self, node) -> str:
         global mainClassName
+        global tickMethod
         body = "\n".join([self.visit(n) for n in node.body])
         # If rewriter inserted a block, we need to terminate it with a semicolon
         if len(node.body):
@@ -270,6 +243,9 @@ class CppTranspiler(CLikeTranspiler):
         if node.name in EQUIVALENT_METHOD_NAMES_TO_BEGIN_PLAY:
             equivalentMethodsToBeginPlay.append(output)
             return ''
+        elif node.name == 'Update':
+            tickMethod = output
+            return ''
         return output
 
     def visit_Global(self, node) -> str:
@@ -295,7 +271,10 @@ class CppTranspiler(CLikeTranspiler):
         if is_self_arg(value_id, node.scopes):
             return f"this->{attr}"
 
-        ret = f"{value_id}.{attr}"
+        if value_id == 'GetOwner()':
+           ret = f"{value_id}->{attr}"
+        else:
+            ret = f"{value_id}.{attr}"
         if ret in self._attr_dispatch_table:
             ret = self._attr_dispatch_table[ret]
             return ret(self, node, value_id, attr)
@@ -304,6 +283,7 @@ class CppTranspiler(CLikeTranspiler):
 
     def visit_ClassDef(self, node) -> str:
         global mainClassName
+        global tickMethod
         isMainClass = mainClassName == ''
         if isMainClass:
             mainClassName = 'A' + node.name
@@ -346,18 +326,6 @@ class CppTranspiler(CLikeTranspiler):
                 b.self_type = node.name
 
         buf += [";\n".join(fields + [""])]
-        # if UNREAL:
-        #     body = []
-        #     for b in node.body:
-        #         b = self.visit(b)
-        #         if '__init__' in b:
-        #             continue
-        #         a = b[ : b.index(' ') ]
-        #         b = b[ b.index(' ') : ]
-        #         c = a + ' ' + node.name + '::' + b
-        #         body.append(c)
-        #     # Almost correct: body = [node.name + '::' + self.visit(b) for b in node.body]
-        # else:
         body = [self.visit(b) for b in node.body]
         if node.is_dataclass:
             field_names = [arg for arg in declarations.keys()]
@@ -387,7 +355,9 @@ class CppTranspiler(CLikeTranspiler):
                 methodEndIndex = method.rfind('\n', method.rfind('{'))
                 equivalentMethodContentsToBeginPlay.append(method[methodIndex : methodEndIndex - 1])
             output = output.replace(REPLACE_INDICATOR + '3', '\n'.join(equivalentMethodContentsToBeginPlay))
-            tickMethodContent = ''
+            methodIndex = tickMethod.find('\n', tickMethod.find('{'))
+            methodEndIndex = tickMethod.rfind('\n', tickMethod.rfind('{'))
+            tickMethodContent = tickMethod[methodIndex : methodEndIndex - 1]
             output = output.replace(REPLACE_INDICATOR + '4', tickMethodContent)
             otherMembers = '\n'.join(buf)
             for method in equivalentMethodsToBeginPlay:
