@@ -234,15 +234,17 @@ def _process_one(settings: LanguageSettings, filename: Path, outdir: str, args, 
             del output[0]
             output.insert(6, output[0])
             del output[0]
+            importsDict = { 'UGameplayStatics' : '#include "Kismet/GameplayStatics.h"' }
+            usedImports = []
             for line in output:
-                if 'UGameplayStatics' in line:
-                    output.insert(6, '#include "Kismet/GameplayStatics.h"')
-                    break
+                for key, value in importsDict.items():
+                    if key in line and key not in usedImports:
+                        output.insert(6, value)
+                        usedImports.append(key)
             output = '\n'.join(output)
             output = output.replace("UGameplayStatics.", "UGameplayStatics::")
             output = output.replace("FVector.", "FVector::")
             output = output.replace("FMath.", "FMath::")
-            output = output.replace("UWorld.", "UWorld::")
         f.write(output.encode("utf-8"))
 
     if settings.formatter:

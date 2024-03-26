@@ -35,7 +35,7 @@ import sys, os
 REPLACE_INDICATOR = 'ꗈ'
 UNREAL = '--unreal=1' in sys.argv
 TEMPLATES_PATH = os.getcwd() + '/Templates'
-UNREAL_ACTOR_TEMPLATE_PATH = TEMPLATES_PATH + '/SceneComponent.cpp'
+UNREAL_ACTOR_TEMPLATE_PATH = TEMPLATES_PATH + '/Actor.cpp'
 EQUIVALENT_METHOD_NAMES_TO_BEGIN_PLAY = [ 'Awake', 'OnEnable', 'Start' ]
 _AUTO = "auto()"
 equivalentMethodsToBeginPlay = []
