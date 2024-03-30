@@ -38,6 +38,8 @@ STDIN = "-"
 STDOUT = "-"
 CWD = Path.cwd()
 UNREAL = '--unreal=1' in sys.argv
+CLASS_MEMBER_VARIABLE_INDICATOR = '#💠'
+memberVariables = []
 
 
 def core_transformers(tree, trees, args):
@@ -188,6 +190,7 @@ def _get_output_path(filename, ext, outdir):
 
 
 def _process_one(settings: LanguageSettings, filename: Path, outdir: str, args, env):
+    global memberVariables
     """Transpile and reformat.
 
     Returns False if reformatter failed.
@@ -225,6 +228,10 @@ def _process_one(settings: LanguageSettings, filename: Path, outdir: str, args, 
     if dunder_init and not source_data:
         print("Detected empty __init__; skipping")
         return True
+    lines = source_data.split('\n')
+    for line in lines:
+        if line.startswith(CLASS_MEMBER_VARIABLE_INDICATOR):
+            memberVariables.append(line[len(CLASS_MEMBER_VARIABLE_INDICATOR) :])
     result = _transpile([filename], [source_data], settings, args)
     with open(output_path, "wb") as f:
         output = result[0][0]

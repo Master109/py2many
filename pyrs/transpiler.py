@@ -29,6 +29,7 @@ from .plugins import (
     SMALL_DISPATCH_MAP,
     SMALL_USINGS_MAP,
 )
+import py2many.cli
 
 mainClassName = ''
 
@@ -459,6 +460,10 @@ class RustTranspiler(CLikeTranspiler):
             return "None"
         else:
             ret = super().visit_Name(node)
+            for memberVariable in py2many.cli.memberVariables:
+                if ret in memberVariable:
+                    ret = 'self.' + ret
+                    break
             definition = node.scopes.find(node.id)
             if (
                 definition
@@ -609,9 +614,13 @@ class RustTranspiler(CLikeTranspiler):
         )
         impl_extension = "#[pymethods]\n" if self.extension else ""
         impl_def = f"{impl_extension}impl {node.name} {{\n"
-        buf = [self.visit(b) for b in node.body]
+        buf = [self.visit(b) for b in node.body if b.name != "__init__" ]
         buf_str = "\n".join(buf)
-        return f"{extension}{struct_def}{impl_def}{buf_str} \n}}"
+        output = f"{extension}{struct_def}{impl_def}{buf_str} \n}}"
+        output += '\n\npub fn main() {' + mainClassName + '::Start(&' + mainClassName + ' {' + ', '.join(py2many.cli.memberVariables) + '''});
+		return;
+ 		}'''
+        return output
 
     def visit_IntEnum(self, node) -> str:
         fields = []
