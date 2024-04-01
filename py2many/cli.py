@@ -252,6 +252,13 @@ def _process_one(settings: LanguageSettings, filename: Path, outdir: str, args, 
             output = output.replace("UGameplayStatics.", "UGameplayStatics::")
             output = output.replace("FVector.", "FVector::")
             output = output.replace("FMath.", "FMath::")
+            output = output.replace("GetParentActor().", "GetParentActor()->")
+            output = output.replace("GetParentComponent().", "GetParentComponent()->")
+            output = output.replace("GetAttachParentActor().", "GetAttachParentActor()->")
+            output = output.replace("ETeleportType.none", "ETeleportType::None")
+            output = output.replace("NULL", "nullptr")
+            output = output.replace("nullptr.", "&")
+            output = output.replace("RootComponent.", "RootComponent->")
         f.write(output.encode("utf-8"))
 
     if settings.formatter:
