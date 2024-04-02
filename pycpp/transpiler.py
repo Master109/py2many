@@ -31,6 +31,8 @@ from .plugins import (
 )
 from .tracer import decltype
 import sys, os
+sys.path.append(os.getcwd())
+from StringExtensions import *
 
 REPLACE_INDICATOR = 'ꗈ'
 UNREAL = '--unreal=1' in sys.argv
@@ -41,26 +43,6 @@ _AUTO = "auto()"
 equivalentMethodsToBeginPlay = []
 tickMethod = ''
 mainClassName = ''
-
-def IndexOfAny (string, findAny):
-    output = len(string)
-    for find in findAny:
-        indexOfFind = string.find(find)
-        if indexOfFind != -1:
-            output = min(indexOfFind, output)
-    if output == len(string):
-        return -1
-    return output
-
-def LastIndexOfAny (string : str, findAny : List[str]):
-    output = len(string)
-    for find in findAny:
-        indexOfFind = string.rfind(find)
-        if indexOfFind != -1:
-            output = min(indexOfFind, output)
-    if output == len(string):
-        return -1
-    return output
 
 # TODO: merge this into py2many.cli.transpiler and fixup the tests
 def transpile(source, headers=False, testing=False):
@@ -490,6 +472,7 @@ class CppTranspiler(CLikeTranspiler):
         return f"((std::array<unsigned char, {n}>){byte_literal})"
 
     def visit_Name(self, node) -> str:
+        # print('WOW' + node.id)
         if node.id == "None":
             return "nullptr"
         else:
