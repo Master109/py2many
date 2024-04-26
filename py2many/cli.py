@@ -31,16 +31,26 @@ from .rewriters import (
 )
 from .scope import add_scope_context
 from .toposort_modules import toposort
+from StringExtensions import *
+from SystemExtensions import *
 
 PY2MANY_DIR = Path(__file__).parent
 ROOT_DIR = PY2MANY_DIR.parent
 STDIN = "-"
 STDOUT = "-"
 CWD = Path.cwd()
+EXCULDE_ITEM_INDICATOR = 'exclude='
 UNREAL = '--unreal=1' in sys.argv
+BEVY = '--bevy=1' in sys.argv
 CLASS_MEMBER_VARIABLE_INDICATOR = '#💠'
+CONSTANT_INDICATOR = 'const'
+POINTER_INDICATOR = "ptr"
+excludeItems = []
 memberVariables = []
 
+for arg in sys.argv:
+    if arg.startswith(EXCULDE_ITEM_INDICATOR):
+        excludeItems.append(arg[len(EXCULDE_ITEM_INDICATOR) :])
 
 def core_transformers(tree, trees, args):
     add_variable_context(tree, trees)
@@ -195,6 +205,7 @@ def _process_one(settings: LanguageSettings, filename: Path, outdir: str, args, 
 
     Returns False if reformatter failed.
     """
+    filePath = str(filename)
     suffix = f".{args.suffix}" if args.suffix is not None else settings.ext
     output_path = _get_output_path(
         filename.relative_to(filename.parent), suffix, outdir
@@ -233,6 +244,18 @@ def _process_one(settings: LanguageSettings, filename: Path, outdir: str, args, 
         if line.startswith(CLASS_MEMBER_VARIABLE_INDICATOR):
             memberVariables.append(line[len(CLASS_MEMBER_VARIABLE_INDICATOR) :])
     result = _transpile([filename], [source_data], settings, args)
+    filePaths = GetAllFilePathsOfType(sys.argv[-1], '.cs')
+    mainClassName = filePath[filePath.rfind('/') + 1 : filePath.rfind('.')]
+    mainClassNames = []
+    for filePath in filePaths:
+        isExcluded = False
+        for excludeItem in excludeItems:
+            if excludeItem in filePath:
+                isExcluded = True
+                break
+        if not isExcluded:
+            mainClassNames.append(mainClassName)
+    addedImports = []
     with open(output_path, "wb") as f:
         output = result[0][0]
         if UNREAL:
@@ -241,24 +264,31 @@ def _process_one(settings: LanguageSettings, filename: Path, outdir: str, args, 
             del output[0]
             output.insert(6, output[0])
             del output[0]
-            importsDict = { 'UGameplayStatics' : '#include "Kismet/GameplayStatics.h"' }
+            importsDict = { 'UGameplayStatics' : '#include "Kismet/GameplayStatics.h"', 'UKismetMathLibrary' : '#include "Kismet/KismetMathLibrary.h"' }
             usedImports = []
-            for line in output:
+            i = 0
+            while True:
+                line = output[i]
                 for key, value in importsDict.items():
                     if key in line and key not in usedImports:
                         output.insert(6, value)
+                        if i >= 6:
+                            i += 1
                         usedImports.append(key)
+                indexOfAssignToNone = line.find(' = None')
+                if indexOfAssignToNone != -1:
+                    if 'FTransform ' in line or 'double ' in line:
+                        line = line.replace(' = None', '')
+                output[i] = line
+                i += 1
+                if i == len(output):
+                    break
             output = '\n'.join(output)
-            output = output.replace("UGameplayStatics.", "UGameplayStatics::")
-            output = output.replace("FVector.", "FVector::")
-            output = output.replace("FMath.", "FMath::")
-            output = output.replace("GetParentActor().", "GetParentActor()->")
-            output = output.replace("GetParentComponent().", "GetParentComponent()->")
-            output = output.replace("GetAttachParentActor().", "GetAttachParentActor()->")
-            output = output.replace("ETeleportType.none", "ETeleportType::None")
-            output = output.replace("NULL", "nullptr")
-            output = output.replace("nullptr.", "&")
-            output = output.replace("RootComponent.", "RootComponent->")
+            output = output.replace('.' + CONSTANT_INDICATOR, '::')
+            output = output.replace('.' + POINTER_INDICATOR, '->')
+            output = output.replace('None', 'nullptr')
+            output = output.replace('NULL', 'nullptr')
+            output = output.replace('nullptr.', '&')
         f.write(output.encode("utf-8"))
 
     if settings.formatter:
@@ -478,7 +508,7 @@ def main(args=None, env=os.environ):
 
         if source.is_file() or source.name == STDIN:
             print(f"Writing to: {outdir}", file=sys.stderr)
-            #try:
+            # try:
             rv = _process_one(settings, source, outdir, args, env)
             # except Exception as e:
             #     import traceback
