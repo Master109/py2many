@@ -258,6 +258,7 @@ def _process_one(settings: LanguageSettings, filename: Path, outdir: str, args, 
     addedImports = []
     with open(output_path, "wb") as f:
         output = result[0][0]
+        output = output.replace('.' + CONSTANT_INDICATOR, '::')
         if UNREAL:
             output = output.split('\n')
             output.insert(6, output[0])
@@ -284,7 +285,6 @@ def _process_one(settings: LanguageSettings, filename: Path, outdir: str, args, 
                 if i == len(output):
                     break
             output = '\n'.join(output)
-            output = output.replace('.' + CONSTANT_INDICATOR, '::')
             output = output.replace('.' + POINTER_INDICATOR, '->')
             output = output.replace('None', 'nullptr')
             output = output.replace('NULL', 'nullptr')
