@@ -155,7 +155,7 @@ class RustTranspilerPlugins:
         if not vargs:
             if cast_to == "i32":
                 return "0"
-            elif cast_to == "f64":
+            elif cast_to == "f32":
                 return "0.0"
         return f"{vargs[0]} as {cast_to}"
 
@@ -172,7 +172,7 @@ SMALL_DISPATCH_MAP = {
     "sum": lambda n, vargs: f"{vargs[0]}.iter().sum()",
     "int": functools.partial(RustTranspilerPlugins.visit_cast, cast_to="i32"),
     "bool": lambda n, vargs: f"({vargs[0]} != 0)" if vargs else "false",
-    "float": functools.partial(RustTranspilerPlugins.visit_cast, cast_to="f64"),
+    "float": functools.partial(RustTranspilerPlugins.visit_cast, cast_to="f32"),
     # as usize below is a hack to pass comb_sort.rs. Need a better solution
     "floor": lambda n, vargs: f"{vargs[0]}.floor() as i32",
     "reversed": lambda n, vargs: f"{vargs[0]}.iter().rev()",
@@ -227,7 +227,7 @@ FUNC_DISPATCH_TABLE: Dict[FuncType, Tuple[Callable, bool]] = {
     math.atan: (lambda self, node, vargs: f"{vargs[0]}.atan()", False),
     time.time: (lambda self, node, vargs: "pylib::time()", False),
     random.seed: (
-        lambda self, node, vargs: f"pylib::random::reseed_from_f64({vargs[0]})",
+        lambda self, node, vargs: f"pylib::random::reseed_from_f32({vargs[0]})",
         False,
     ),
     random.random: (lambda self, node, vargs: "pylib::random::random()", False),

@@ -20,7 +20,7 @@ from py2many.inference import InferTypesTransformer, get_inferred_type, is_refer
 
 RUST_TYPE_MAP = {
     int: "i32",
-    float: "f64",
+    float: "f32",
     bytes: "&[u8]",
     str: "&str",
     bool: "bool",
