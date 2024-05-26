@@ -50,7 +50,7 @@ memberVariables = []
 
 for arg in sys.argv:
     if arg.startswith(EXCULDE_ITEM_INDICATOR):
-        excludeItems.append(arg[len(EXCULDE_ITEM_INDICATOR) :])
+        excludeItems.append(os.path.expanduser(arg[len(EXCULDE_ITEM_INDICATOR) :]))
 
 def core_transformers(tree, trees, args):
     add_variable_context(tree, trees)
