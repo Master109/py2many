@@ -244,17 +244,6 @@ def _process_one(settings: LanguageSettings, filename: Path, outdir: str, args, 
         if line.startswith(CLASS_MEMBER_VARIABLE_INDICATOR):
             memberVariables.append(line[len(CLASS_MEMBER_VARIABLE_INDICATOR) :])
     result = _transpile([filename], [source_data], settings, args)
-    filePaths = GetAllFilePathsOfType(sys.argv[-1], '.cs')
-    mainClassName = filePath[filePath.rfind('/') + 1 : filePath.rfind('.')]
-    mainClassNames = []
-    for filePath in filePaths:
-        isExcluded = False
-        for excludeItem in excludeItems:
-            if excludeItem in filePath:
-                isExcluded = True
-                break
-        if not isExcluded:
-            mainClassNames.append(mainClassName)
     addedImports = []
     with open(output_path, "wb") as f:
         output = result[0][0]
